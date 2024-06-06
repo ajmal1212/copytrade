@@ -1,9 +1,25 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import json
 import pymysql
 import requests
 
-app = Flask(__name__)
+app = Flask(__name__, static_url_path='/static')
+
+@app.route("/")
+def html():
+    return render_template("index.html")
+
+@app.route("/index.html")
+def index():
+    return render_template("index.html")
+
+@app.route("/components-alerts.html")
+def html1():
+    return render_template("components-alerts.html")
+
+@app.route("/users-profile.html")
+def html2():
+    return render_template("users-profile.html")
 
 # Database configuration
 db_config = {
@@ -46,6 +62,9 @@ def hook():
     if request.headers['Content-Type'] == 'application/json':
         data = request.json
         
+        # Print received webhook data
+        print("Received webhook data:", data)
+
         # Fetch jkey, uid, and actid from the database
         jkey_value, uid_value, actid_value = fetch_jkey_and_user_info()
         
