@@ -2,9 +2,13 @@ from flask import Flask, request, jsonify, render_template
 import json
 import pymysql
 import requests
-from register import register_bp  # Import the register blueprint
+import logging
 
 app = Flask(__name__, static_url_path='/static')
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+app.logger.setLevel(logging.INFO)
 
 @app.route("/")
 def html():
@@ -62,9 +66,9 @@ def faq():
 def login():
     return render_template("pages-login.html")
 
-@app.route("/pages-register.html")
+@app.route("/register.html")
 def register():
-    return render_template("pages-register.html")
+    return render_template("register.html")
 
 @app.route("/tables-data.html")
 def data():
