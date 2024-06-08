@@ -3,8 +3,14 @@ import json
 import pymysql
 import requests
 import logging
+import pyotp
+import qrcode  # Make sure to add this import
+from io import BytesIO
+import base64
 
 app = Flask(__name__, static_url_path='/static')
+
+TOTP_SECRET = 'JBSWY3DPEHPK3PXP'
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -62,10 +68,43 @@ def error():
 def faq():
     return render_template("pages-faq.html")
 
-@app.route("/pages-login.html")
+@app.route('/pages-login.html', methods=['GET', 'POST'])
 def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        totp_code = request.form['totp']
+
+        # Verify TOTP
+        totp = pyotp.TOTP(TOTP_SECRET)
+        if totp.verify(totp_code):
+            # Proceed with your user authentication logic
+            # Here, we'll just print the username and password for demonstration
+            print(f"Username: {username}")
+            print(f"Password: {password}")
+            return "Login successful"
+        else:
+            flash("Invalid TOTP code")
+            return redirect(url_for('login'))
     return render_template("pages-login.html")
 
+@app.route('/generate-totp', methods=['POST'])
+def generate_totp():
+    # Generate a new TOTP secret
+    new_totp_secret = pyotp.random_base32()
+
+    # Create a TOTP object
+    totp = pyotp.TOTP(new_totp_secret)
+
+    # Generate a QR code
+    qr_url = totp.provisioning_uri(name="user@example.com", issuer_name="YourApp")
+    qr = qrcode.make(qr_url)
+    buffered = BytesIO()
+    qr.save(buffered, format="PNG")
+    qr_code_img = base64.b64encode(buffered.getvalue()).decode('utf-8')
+
+    return jsonify({'secret': new_totp_secret, 'qr_code_img': qr_code_img})
+    
 @app.route("/register.html")
 def register():
     return render_template("register.html")
