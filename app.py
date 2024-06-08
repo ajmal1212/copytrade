@@ -14,11 +14,11 @@ app.logger.setLevel(logging.INFO)
 def html():
     return render_template("index.html")
 
-@app.route("/index.html")
+@app.route("/index")
 def index():
     return render_template("index.html")
 
-@app.route("/charts-apexcharts.html")
+@app.route("/apexcharts")
 def apexcharts():
     return render_template("charts-apexcharts.html")
 
