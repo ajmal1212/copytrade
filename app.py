@@ -27,7 +27,7 @@ def index():
 @app.route("/apexcharts")
 def apexcharts():
     return render_template("charts-apexcharts.html")
-
+ 
 @app.route("/charts-chartjs.html")
 def chartjs():
     return render_template("charts-chartjs.html")
@@ -202,4 +202,4 @@ def hook():
         return error_message, 415  # Return an error for unsupported Content-Type
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=8080, debug=True)
+    app.run(debug=True)
