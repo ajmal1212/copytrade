@@ -2,3 +2,6 @@ Flask==3.0.3
 pymysql==1.0.2
 requests==2.26.0
 Werkzeug==3.0.3
+pyotp
+qrcode
+base64
