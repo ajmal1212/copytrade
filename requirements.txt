@@ -4,4 +4,3 @@ requests==2.26.0
 Werkzeug==3.0.3
 pyotp
 qrcode
-base64==8.30
