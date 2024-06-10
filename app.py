@@ -1,14 +1,23 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
 import json
 import pymysql
 import requests
 import logging
 import pyotp
-import qrcode  # Make sure to add this import
+import qrcode
 from io import BytesIO
 import base64
+import mysql.connector
 
 app = Flask(__name__, static_url_path='/static')
+
+# Database configuration
+db_config = {
+    'host': 'sql.freedb.tech',
+    'user': 'freedb_Ajmal',
+    'password': 'f8PbPDFWub$&4@$',
+    'database': 'freedb_Levels'
+}
 
 TOTP_SECRET = 'JBSWY3DPEHPK3PXP'
 
@@ -16,17 +25,65 @@ TOTP_SECRET = 'JBSWY3DPEHPK3PXP'
 logging.basicConfig(level=logging.INFO)
 app.logger.setLevel(logging.INFO)
 
-@app.route("/")
-def html():
-    return render_template("index.html")
+app.secret_key = 'ygjhfgjghkkmb'  # Set a secret key for session management
 
-@app.route("/index")
+def get_db_connection():
+    connection = mysql.connector.connect(
+        host=db_config['host'],
+        user=db_config['user'],
+        password=db_config['password'],
+        database=db_config['database']
+    )
+    return connection
+
+@app.route('/')
 def index():
-    return render_template("index.html")
+    return render_template('index.html')
+
+@app.route('/create_account', methods=['POST'])
+def create_account():
+    client_code = request.form['client_code']
+    name = request.form['name']
+    number = request.form['number']
+    mail_id = request.form['mail_id']
+
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    
+    try:
+        app.logger.info(f"Attempting to insert: {client_code}, {name}, {number}, {mail_id}")
+        cursor.execute('INSERT INTO accounts (client_code, name, number, mail_id) VALUES (%s, %s, %s, %s)', 
+                       (client_code, name, number, mail_id))
+        connection.commit()
+        app.logger.info("Insert successful, committed to database")
+        flash('Account created successfully!', 'success')
+    except mysql.connector.Error as err:
+        app.logger.error(f"Error: {err}")
+        flash(f'Error: {err}', 'danger')
+    finally:
+        cursor.close()
+        connection.close()
+
+    return redirect(url_for('index'))
 
 @app.route("/apexcharts")
 def apexcharts():
     return render_template("charts-apexcharts.html")
+
+@app.route("/childusers")
+def childuser():
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    
+    try:
+        cursor.execute('SELECT * FROM accounts')
+        accounts_data = cursor.fetchall()
+    finally:
+        cursor.close()
+        connection.close()
+
+    return render_template('child-users.html', accounts=accounts_data)
+
  
 @app.route("/charts-chartjs.html")
 def chartjs():
@@ -41,7 +98,7 @@ def accordion():
     return render_template("components-accordion.html")
 
 @app.route("/components-alerts.html")
-def html1():
+def alerts():
     return render_template("components-alerts.html")
 
 @app.route("/components-badges.html")
@@ -61,7 +118,7 @@ def contact():
     return render_template("pages-contact.html")
 
 @app.route("/pages-error-404.html")
-def error():
+def error_404():
     return render_template("pages-error-404.html")
 
 @app.route("/pages-faq.html")
@@ -79,7 +136,6 @@ def login():
         totp = pyotp.TOTP(TOTP_SECRET)
         if totp.verify(totp_code):
             # Proceed with your user authentication logic
-            # Here, we'll just print the username and password for demonstration
             print(f"Username: {username}")
             print(f"Password: {password}")
             return "Login successful"
@@ -110,26 +166,18 @@ def register():
     return render_template("register.html")
 
 @app.route("/tables-data.html")
-def data():
+def tables_data():
     return render_template("tables-data.html")
 
 @app.route("/tables-general.html")
-def general():
+def tables_general():
     return render_template("tables-general.html")
 
 @app.route("/users-profile.html")
-def html2():
+def users_profile():
     return render_template("users-profile.html")
 
-# Database configuration
-db_config = {
-    'host': 'sql.freedb.tech',
-    'user': 'freedb_Ajmal',
-    'password': 'f8PbPDFWub$&4@$',
-    'database': 'freedb_Levels'
-}
-
-def get_db_connection():
+def get_db_connection_pymysql():
     conn = pymysql.connect(
         host=db_config['host'],
         user=db_config['user'],
@@ -140,25 +188,24 @@ def get_db_connection():
     return conn
 
 def fetch_jkey_and_user_info():
-    conn = get_db_connection()
+    conn = get_db_connection_pymysql()
     with conn.cursor() as cursor:
-        cursor.execute('SELECT jkey, uid, actid FROM user_info WHERE id = 1')  # Adjust the query and condition as needed
+        cursor.execute('SELECT jkey, uid, actid FROM user_info WHERE id = 1')
         user_info = cursor.fetchone()
     conn.close()
     return user_info['jkey'], user_info['uid'], user_info['actid']
 
 def send_to_another_api(data_with_jkey):
-    api_url = "https://skypro.skybroking.com/NorenWClientTP/PlaceOrder"  # Replace with your target API URL
+    api_url = "https://skypro.skybroking.com/NorenWClientTP/PlaceOrder"
     headers = {
         "Content-Type": "application/json",
-        # "Authorization": "Bearer YOUR_BEARER_TOKEN"  # Replace with your Bearer token
     }
     
     response = requests.post(api_url, headers=headers, data=data_with_jkey)
     return response.status_code, response.json()
 
 @app.route("/webhook", methods=['POST'])
-def hook():
+def webhook():
     if request.headers['Content-Type'] == 'application/json':
         data = request.json
         
@@ -176,11 +223,11 @@ def hook():
             "tsym": data.get("tsym"),
             "qty": data.get("qty"),
             "prc": data.get("prc"),
-            "prd": data.get("pcode"),  # Map pcode to prd
+            "prd": data.get("pcode"),
             "trantype": data.get("trantype"),
             "prctyp": data.get("prctyp"),
             "ret": data.get("ret"),
-            "ordersource": data.get("ordersource", "API")  # Default to "API" if not provided
+            "ordersource": data.get("ordersource", "API")
         }
         
         # Convert the dictionary to a JSON string
@@ -195,11 +242,11 @@ def hook():
         status_code, response_data = send_to_another_api(data_with_jkey)
         print(f"Forwarded data to another API, response status: {status_code}, response data: {response_data}")
 
-        return data_with_jkey, 200  # Return the formatted string and a 200 OK status
+        return data_with_jkey, 200
     else:
         error_message = "Content-Type not supported!"
         print(f"Unsupported Content-Type: {request.headers['Content-Type']}")
-        return error_message, 415  # Return an error for unsupported Content-Type
+        return error_message, 415
 
 if __name__ == "__main__":
     app.run(debug=True)
