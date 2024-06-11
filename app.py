@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, current_app
 import json
 import pymysql
 import requests
@@ -7,7 +7,7 @@ import pyotp
 import qrcode
 from io import BytesIO
 import base64
-import mysql.connector
+from werkzeug.security import generate_password_hash
 
 app = Flask(__name__, static_url_path='/static')
 
@@ -28,11 +28,12 @@ app.logger.setLevel(logging.INFO)
 app.secret_key = 'ygjhfgjghkkmb'  # Set a secret key for session management
 
 def get_db_connection():
-    connection = mysql.connector.connect(
+    connection = pymysql.connect(
         host=db_config['host'],
         user=db_config['user'],
         password=db_config['password'],
-        database=db_config['database']
+        database=db_config['database'],
+        cursorclass=pymysql.cursors.DictCursor
     )
     return connection
 
@@ -51,20 +52,37 @@ def create_account():
     cursor = connection.cursor()
     
     try:
-        app.logger.info(f"Attempting to insert: {client_code}, {name}, {number}, {mail_id}")
+        current_app.logger.info(f"Attempting to insert: {client_code}, {name}, {number}, {mail_id}")
         cursor.execute('INSERT INTO accounts (client_code, name, number, mail_id) VALUES (%s, %s, %s, %s)', 
                        (client_code, name, number, mail_id))
         connection.commit()
-        app.logger.info("Insert successful, committed to database")
+        current_app.logger.info("Insert successful, committed to database")
         flash('Account created successfully!', 'success')
-    except mysql.connector.Error as err:
-        app.logger.error(f"Error: {err}")
+    except pymysql.MySQLError as err:
+        current_app.logger.error(f"Error: {err}")
         flash(f'Error: {err}', 'danger')
     finally:
         cursor.close()
         connection.close()
 
     return redirect(url_for('index'))
+
+@app.route('/childusers/api', methods=['POST'])
+def apidata():
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute('SELECT * FROM accounts')
+        accounts = cursor.fetchall()  # Fetch all results
+    except pymysql.MySQLError as err:
+        current_app.logger.error(f"Error: {err}")
+        return jsonify({"error": str(err)}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
+    return jsonify(accounts)  # Return the fetched data as JSON
 
 @app.route("/apexcharts")
 def apexcharts():
@@ -73,7 +91,7 @@ def apexcharts():
 @app.route("/childusers")
 def childuser():
     connection = get_db_connection()
-    cursor = connection.cursor(dictionary=True)
+    cursor = connection.cursor()
     
     try:
         cursor.execute('SELECT * FROM accounts')
@@ -84,7 +102,6 @@ def childuser():
 
     return render_template('child-users.html', accounts=accounts_data)
 
- 
 @app.route("/charts-chartjs.html")
 def chartjs():
     return render_template("charts-chartjs.html")
@@ -160,9 +177,39 @@ def generate_totp():
     qr_code_img = base64.b64encode(buffered.getvalue()).decode('utf-8')
 
     return jsonify({'secret': new_totp_secret, 'qr_code_img': qr_code_img})
-    
-@app.route("/register.html")
+
+@app.route("/register" , methods=['POST'])
 def register():
+    # Get form data
+    name = request.form['name']
+    email = request.form['email']
+    username = request.form['username']
+    password = request.form['password']
+    
+    # Hash the password
+    hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
+
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    try:
+        current_app.logger.info(f"Attempting to insert: {name}, {email}, {username}, {hashed_password}")
+        cursor.execute('INSERT INTO users (name, email, username, password) VALUES (%s, %s, %s, %s)', 
+                       (name, email, username, hashed_password))
+        connection.commit()
+        current_app.logger.info("Insert successful, committed to database")
+        flash('Account created successfully!', 'success')
+    except pymysql.MySQLError as err:
+        current_app.logger.error(f"Error: {err}")
+        flash(f'Error: {err}', 'danger')
+    finally:
+        cursor.close()
+        connection.close()
+
+    return redirect(url_for('index'))
+
+@app.route("/user-register")
+def user_register():
     return render_template("register.html")
 
 @app.route("/tables-data.html")
@@ -177,18 +224,8 @@ def tables_general():
 def users_profile():
     return render_template("users-profile.html")
 
-def get_db_connection_pymysql():
-    conn = pymysql.connect(
-        host=db_config['host'],
-        user=db_config['user'],
-        password=db_config['password'],
-        database=db_config['database'],
-        cursorclass=pymysql.cursors.DictCursor
-    )
-    return conn
-
 def fetch_jkey_and_user_info():
-    conn = get_db_connection_pymysql()
+    conn = get_db_connection()
     with conn.cursor() as cursor:
         cursor.execute('SELECT jkey, uid, actid FROM user_info WHERE id = 1')
         user_info = cursor.fetchone()
