@@ -206,6 +206,14 @@ def register():
         cursor.close()
         connection.close()
 
+    form_data = request.form.to_dict()
+    response = requests.post('https://mail-system-cfca.onrender.com/send_email', json=form_data)
+    
+    if response.status_code == 200:
+        return 'Registration successful and email sent!'
+    else:
+        return 'Registration successful but failed to send email.', 500
+
     return redirect(url_for('index'))
 
 @app.route("/user-register")
